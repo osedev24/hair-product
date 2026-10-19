@@ -30,6 +30,7 @@ For a production server, build the frontend with `npm run build` and run the API
 - Catalog, category browsing, product stock indicators, product CRUD, and Appwrite image uploads. Uploads accept image files up to 8 MB.
 - Persistent browser cart. The server re-reads current prices and locks product rows during checkout; order line items retain name, price, and image snapshots.
 - Admin order status management. Inventory is decremented transactionally when a pending order is confirmed.
+- Editable checkout form fields in the homepage editor. Fields can be added, hidden, removed, relabeled, and marked required; submitted answers are stored with each order.
 - WhatsApp click-to-chat handoff after order creation. Configure `WHATSAPP_PHONE` in international digits without `+`.
 - CMS tables for site settings, pages, and page sections. Section content/style are JSONB. Only registered section types are accepted; arbitrary database code is never executed.
 - Homepage editing for section copy, visibility/order, image upload/replacement, SEO fields, brand colors, fonts, announcement, social/contact settings, and publishing.
