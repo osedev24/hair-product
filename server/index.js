@@ -6,11 +6,12 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
+import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pool, query } from './db.js';
 import { login, logout, current, requireAdmin } from './auth.js';
 import { productInput, checkoutInput } from './validation.js';
-import { storageClient, ID } from './uploads.js';
 import { collectCheckoutDetails, getCheckoutFields, validateCheckoutFields } from './checkout-fields.js';
 
 const app=express(), port=process.env.PORT||4000;
@@ -36,8 +37,10 @@ app.get('/api/admin/products',admin,async(_req,res)=>{const {rows}=await query('
 app.post('/api/admin/products',admin,async(req,res)=>{const parsed=productInput.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Invalid product',details:parsed.error.flatten()});const p=parsed.data;const {rows}=await query(`INSERT INTO products(name,slug,description,price,stock,low_stock_threshold,category_id,images,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[p.name,p.slug,p.description,p.price,p.stock,p.lowStockThreshold,p.categoryId||null,p.images,p.active]);res.status(201).json(rows[0]);});
 app.put('/api/admin/products/:id',admin,async(req,res)=>{const parsed=productInput.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Invalid product',details:parsed.error.flatten()});const p=parsed.data;const {rows}=await query(`UPDATE products SET name=$1,slug=$2,description=$3,price=$4,stock=$5,low_stock_threshold=$6,category_id=$7,images=$8,active=$9,updated_at=now() WHERE id=$10 RETURNING *`,[p.name,p.slug,p.description,p.price,p.stock,p.lowStockThreshold,p.categoryId||null,p.images,p.active,req.params.id]);if(!rows[0])return res.status(404).json({error:'Product not found'});res.json(rows[0]);});
 app.delete('/api/admin/products/:id',admin,async(req,res)=>{await query('UPDATE products SET active=false,updated_at=now() WHERE id=$1',[req.params.id]);res.json({ok:true});});
-const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:8*1024*1024},fileFilter:(_req,file,cb)=>cb(null,/^image\/(jpeg|png|webp|avif)$/.test(file.mimetype))});
-app.post('/api/admin/uploads',admin,upload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Choose a PNG, JPEG, WebP or AVIF image'});try{const {storage,bucket}=storageClient();const file=await storage.createFile(bucket,ID.unique(),new File([req.file.buffer],req.file.originalname,{type:req.file.mimetype}));const url=`${process.env.APPWRITE_ENDPOINT}/storage/buckets/${bucket}/files/${file.$id}/view?project=${process.env.APPWRITE_PROJECT_ID}`;res.status(201).json({id:file.$id,url});}catch(e){res.status(503).json({error:'Image upload failed',details:e.message});}});
+const uploadDir=path.resolve(process.env.UPLOAD_DIR||'uploads');mkdirSync(uploadDir,{recursive:true});
+const imageExtensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif'};
+const upload=multer({storage:multer.diskStorage({destination:uploadDir,filename:(_req,file,cb)=>cb(null,`${randomUUID()}.${imageExtensions[file.mimetype]||'img'}`)}),limits:{fileSize:8*1024*1024},fileFilter:(_req,file,cb)=>cb(null,Boolean(imageExtensions[file.mimetype]))});
+app.post('/api/admin/uploads',admin,upload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Choose a PNG, JPEG, WebP or AVIF image'});res.status(201).json({id:req.file.filename,url:`/uploads/${req.file.filename}`});});
 app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:true,legacyHeaders:false}),async(req,res)=>{
   const parsed=checkoutInput.safeParse(req.body);
   if(!parsed.success)return res.status(400).json({error:'Check your checkout details',details:parsed.error.flatten()});
@@ -84,6 +87,7 @@ app.put('/api/admin/site/settings',admin,async(req,res)=>{try{const settings=val
 app.put('/api/admin/site/pages/:slug',admin,async(req,res)=>{const slug=String(req.params.slug).replace(/[^a-z0-9-]/g,'').slice(0,100);const d=req.body||{};try{const sections=(d.sections||[]).slice(0,30);for(const s of sections){if(!validSections.has(s.type))return res.status(400).json({error:`Unsupported section type: ${s.type}`});cleanContent(s.content);validateStyles(s.styles||{});}const client=await pool.connect();try{await client.query('BEGIN');const page=(await client.query('INSERT INTO site_pages(slug,title,seo_title,seo_description,published) VALUES($1,$2,$3,$4,$5) ON CONFLICT(slug) DO UPDATE SET title=EXCLUDED.title,seo_title=EXCLUDED.seo_title,seo_description=EXCLUDED.seo_description,updated_at=now() RETURNING id',[slug,String(d.title||'').slice(0,160),String(d.seoTitle||'').slice(0,180),String(d.seoDescription||'').slice(0,320),Boolean(d.published)])).rows[0];await client.query('DELETE FROM page_sections WHERE page_id=$1',[page.id]);for(let i=0;i<sections.length;i++){const s=sections[i];await client.query('INSERT INTO page_sections(page_id,section_type,content,styles,visible,sort_order) VALUES($1,$2,$3,$4,$5,$6)',[page.id,s.type,cleanContent(s.content),validateStyles(s.styles||{}),s.visible!==false,i]);}await client.query('COMMIT');res.json({ok:true});}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}catch(e){res.status(400).json({error:e.message});}});
 app.post('/api/admin/site/preview',admin,async(req,res)=>{try{const d=req.body||{},rawPage=d.page||{};if(!Array.isArray(rawPage.sections)||rawPage.sections.length>30)throw new Error('Preview requires a section list');const page={slug:String(rawPage.slug||'home').replace(/[^a-z0-9-]/g,'').slice(0,100),title:String(rawPage.title||'').slice(0,160),seoTitle:String(rawPage.seoTitle||rawPage.seo_title||'').slice(0,180),seoDescription:String(rawPage.seoDescription||rawPage.seo_description||'').slice(0,320),sections:rawPage.sections.map(s=>{if(!validSections.has(s.type))throw new Error(`Unsupported section type: ${s.type}`);return{type:s.type,content:cleanContent(s.content||{}),styles:validateStyles(s.styles||{}),visible:s.visible!==false};})};res.json({settings:validateSettings(d.settings||{}),page:{...page,published:false}});}catch(e){res.status(400).json({error:e.message});}});
 app.use('/api',(_req,res)=>res.status(404).json({error:'API route not found'}));
+app.use('/uploads',express.static(uploadDir,{dotfiles:'deny',index:false,maxAge:'1d'}));
 app.use(express.static(path.resolve('dist')));
 app.get('*',(req,res,next)=>req.path.startsWith('/api/')?next():res.sendFile(path.resolve('dist/index.html')));
 app.listen(port,()=>console.log(`Botanical store API listening on ${port}`));

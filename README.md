@@ -23,11 +23,11 @@ React + Vite storefront and admin, Express API, Neon PostgreSQL, and Appwrite St
 
 The migration runner uses the direct `DATABASE_URL_UNPOOLED` connection (falling back to `DATABASE_URL`) and records applied filenames in `schema_migrations`, so it is safe to run again after adding a numbered migration. You can also run the SQL files manually in Neon’s SQL Editor, in numeric order. The app retains its existing bcrypt admin login and PostgreSQL-backed sessions; enabling Neon Auth provisions Managed Auth, but replacing this login requires an explicit identity migration and an owner account in Neon Auth.
 
-For a production server, build the frontend with `npm run build` and run the API with `npm start` behind a TLS reverse proxy. Set `NODE_ENV=production`, use a high entropy session secret, and set `CLIENT_ORIGIN` to the exact public origin. Configure the Appwrite bucket permissions for public read access to product images; only the server API key performs writes.
+For a production server, build the frontend with `npm run build` and run the API with `npm start` behind a TLS reverse proxy. Set `NODE_ENV=production`, use a high entropy session secret, and set `CLIENT_ORIGIN` to the exact public origin. Product images are saved to the local `uploads/` directory; keep that directory on persistent storage and include it in backups. Set `UPLOAD_DIR` to choose a different persistent directory.
 
 ## Features
 
-- Catalog, category browsing, product stock indicators, product CRUD, and Appwrite image uploads. Uploads accept image files up to 8 MB.
+- Catalog, category browsing, product stock indicators, product CRUD, and local image uploads. Uploads accept image files up to 8 MB.
 - Persistent browser cart. The server re-reads current prices and locks product rows during checkout; order line items retain name, price, and image snapshots.
 - Admin order status management. Inventory is decremented transactionally when a pending order is confirmed.
 - Editable checkout form fields in the homepage editor. Fields can be added, hidden, removed, relabeled, and marked required; submitted answers are stored with each order.
@@ -43,7 +43,7 @@ The first admin is created by `npm run seed` from `ADMIN_EMAIL` and `ADMIN_PASSW
 
 - `npm run build` builds the React client.
 - `GET /api/health` checks API database connectivity.
-- Checkout, admin, uploads, product CRUD, and publishing need configured Neon/Appwrite credentials. Use a staging database for a complete end-to-end pass: sign in, upload a product image, add a product, place an order, confirm it, and verify stock decrement and WhatsApp URL.
+- Checkout, admin, uploads, product CRUD, and publishing need configured Neon credentials. Use a staging database for a complete end-to-end pass: sign in, upload a product image, add a product, place an order, confirm it, and verify stock decrement and WhatsApp URL.
 
 ## Security notes
 
