@@ -1,6 +1,7 @@
 node_modules/
 dist/
 uploads/
-.env
+.vercel/
+.env*
 .DS_Store
 .neon
