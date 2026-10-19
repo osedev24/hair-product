@@ -1,6 +1,5 @@
 node_modules/
 dist/
-uploads/
 .vercel/
 .env*
 .DS_Store
