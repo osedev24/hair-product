@@ -21,6 +21,17 @@ app.set('trust proxy',1); app.use(helmet({crossOriginResourcePolicy:{policy:'cro
 app.use(cors({origin:process.env.CLIENT_ORIGIN||'http://localhost:5173',credentials:true})); app.use(express.json({limit:'1mb'}));
 const PgStore=pgSession(session);
 app.use(session({name:'botanical.sid',store:new PgStore({pool,tableName:'user_sessions',createTableIfMissing:true}),secret:process.env.SESSION_SECRET||'development-only-change-me',resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',maxAge:1000*60*60*12}}));
+// Vercel rewrites nested /api/* paths through the single /api function. Restore
+// the original path here so Express route matching and query strings stay intact.
+app.use((req,_res,next)=>{
+  const routedPath=req.query?.__vercel_path;
+  if(process.env.VERCEL&&req.path==='/api'&&typeof routedPath==='string'){
+    const target=new URL(req.url,'http://localhost');
+    target.searchParams.delete('__vercel_path');
+    req.url=`/api${routedPath.startsWith('/')?routedPath:`/${routedPath}`}${target.search}`;
+  }
+  next();
+});
 const authLimiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
 const admin=(req,res,next)=>requireAdmin(req,res,next);
 app.use('/api',(_req,res,next)=>{res.set('Cache-Control','no-store');next();});
