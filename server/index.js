@@ -40,7 +40,7 @@ app.put('/api/admin/products/:id',admin,async(req,res)=>{const parsed=productInp
 app.delete('/api/admin/products/:id',admin,async(req,res)=>{await query('UPDATE products SET active=false,updated_at=now() WHERE id=$1',[req.params.id]);res.json({ok:true});});
 const uploadDir=path.resolve(process.env.UPLOAD_DIR||'uploads');if(!process.env.VERCEL)mkdirSync(uploadDir,{recursive:true});
 const imageExtensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif'};
-const upload=multer({storage:multer.diskStorage({destination:uploadDir,filename:(_req,file,cb)=>cb(null,`${randomUUID()}.${imageExtensions[file.mimetype]||'img'}`)}),limits:{fileSize:8*1024*1024},fileFilter:(_req,file,cb)=>cb(null,Boolean(imageExtensions[file.mimetype]))});
+const upload=process.env.VERCEL?null:multer({storage:multer.diskStorage({destination:uploadDir,filename:(_req,file,cb)=>cb(null,`${randomUUID()}.${imageExtensions[file.mimetype]||'img'}`)}),limits:{fileSize:8*1024*1024},fileFilter:(_req,file,cb)=>cb(null,Boolean(imageExtensions[file.mimetype]))});
 if(process.env.VERCEL){
   app.post('/api/admin/uploads',async(req,res)=>{
     try{
