@@ -8,6 +8,9 @@ export async function login(req, res) {
   if (!rows[0] || !(await bcrypt.compare(String(password), rows[0].password_hash))) return res.status(401).json({ error: 'Invalid email or password' });
   await new Promise((resolve,reject)=>req.session.regenerate(err=>err?reject(err):resolve()));
   req.session.adminId = rows[0].id; req.session.adminEmail = rows[0].email;
+  // Do not tell the browser sign-in succeeded until the new session is durable.
+  // On serverless requests, the next API call can otherwise race the store write.
+  await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
   res.json({ admin: { email: rows[0].email } });
 }
 export async function logout(req,res) { req.session.destroy(() => { res.clearCookie('botanical.sid'); res.json({ ok: true }); }); }
