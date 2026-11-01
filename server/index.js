@@ -89,8 +89,24 @@ app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders
     const order=(await client.query(`INSERT INTO orders(customer_name,email,phone,address,city,notes,customer_fields,subtotal,delivery_fee,total,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending') RETURNING id,order_number`,[d.customerName,d.email,d.phone,d.address,d.city,d.notes,JSON.stringify(savedCustomerFields),subtotal,delivery,total])).rows[0];
     for(const item of snapshots)await client.query('INSERT INTO order_items(order_id,product_id,product_name,quantity,unit_price,image_snapshot) VALUES($1,$2,$3,$4,$5,$6)',[order.id,item.productId,item.name,item.quantity,item.unitPrice,item.image]);
     await client.query('COMMIT');
-    const customerSummary=Object.entries(d.values).map(([key,value])=>`${d.labels[key]||key}: ${value}`).join('\n');
-    const msg=`Hello! I'd like to confirm order ${order.order_number}.\n${snapshots.map(i=>`${i.name} × ${i.quantity}`).join('\n')}\nTotal: ₦${total.toLocaleString()}${customerSummary?`\n${customerSummary}`:''}`;
+    const itemSummary=snapshots.map(i=>{
+      const unitPrice=Number(i.unitPrice),lineTotal=unitPrice*i.quantity;
+      return `• ${i.name}\n  ${i.quantity} × ₦${unitPrice.toLocaleString()} = ₦${lineTotal.toLocaleString()}`;
+    }).join('\n');
+    const customerSummary=Object.entries(d.values).map(([key,value])=>`• ${d.labels[key]||key}: ${value}`).join('\n');
+    const msg=[
+      `Hello OJ Naturals! I'd like to confirm order ${order.order_number}.`,
+      '',
+      '*Order details*',
+      itemSummary,
+      '',
+      `Subtotal: ₦${subtotal.toLocaleString()}`,
+      `Delivery fee: ₦${delivery.toLocaleString()}`,
+      `*Total: ₦${total.toLocaleString()}*`,
+      '',
+      '*Customer and delivery details*',
+      customerSummary
+    ].filter((line,index,lines)=>line!==''||lines[index-1]!=='').join('\n');
     const phone=(process.env.WHATSAPP_PHONE||'').replace(/\D/g,'');
     let whatsappUrl=null;
     if(settings.whatsappUrl){const target=new URL(settings.whatsappUrl);target.searchParams.set('text',msg);whatsappUrl=target.href;}
