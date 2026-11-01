@@ -109,8 +109,8 @@ app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders
     ].filter((line,index,lines)=>line!==''||lines[index-1]!=='').join('\n');
     const phone=(process.env.WHATSAPP_PHONE||'').replace(/\D/g,'');
     let whatsappUrl=null;
-    if(settings.whatsappUrl){const target=new URL(settings.whatsappUrl);target.searchParams.set('text',msg);whatsappUrl=target.href;}
-    else if(phone){const target=new URL(`https://wa.me/${phone}`);target.searchParams.set('text',msg);whatsappUrl=target.href;}
+    if(phone){const target=new URL(`https://wa.me/${phone}`);target.searchParams.set('text',msg);whatsappUrl=target.href;}
+    else if(settings.whatsappUrl){const target=new URL(settings.whatsappUrl);const phoneFromUrl=target.hostname==='wa.me'?target.pathname.replace(/^\//,'').replace(/\D/g,''):'';if(phoneFromUrl){target.pathname=`/${phoneFromUrl}`;target.search='';target.hash='';target.searchParams.set('text',msg);whatsappUrl=target.href;}else{target.searchParams.set('text',msg);whatsappUrl=target.href;}}
     res.status(201).json({order:{...order,total,subtotal,deliveryFee:delivery,items:snapshots,customerFields:d.values},whatsappUrl});
   }catch(e){await client.query('ROLLBACK');res.status(e.status||500).json({error:e.message||'Checkout failed'});}finally{client.release();}
 });
