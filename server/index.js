@@ -53,6 +53,14 @@ const uploadDir=path.resolve(process.env.UPLOAD_DIR||'uploads');if(!process.env.
 const imageExtensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif'};
 const upload=process.env.VERCEL?null:multer({storage:multer.diskStorage({destination:uploadDir,filename:(_req,file,cb)=>cb(null,`${randomUUID()}.${imageExtensions[file.mimetype]||'img'}`)}),limits:{fileSize:8*1024*1024},fileFilter:(_req,file,cb)=>cb(null,Boolean(imageExtensions[file.mimetype]))});
 if(process.env.VERCEL){
+  app.post('/api/payment-proof-upload',async(req,res)=>{
+    try{
+      const response=await handleUpload({request:req,body:req.body,onBeforeGenerateToken:async()=>{
+        return{allowedContentTypes:Object.keys(imageExtensions),maximumSizeInBytes:8*1024*1024,addRandomSuffix:true};
+      },onUploadCompleted:async()=>{}});
+      res.json(response);
+    }catch(e){res.status(e.status||400).json({error:e.message||'Payment proof upload failed'});}
+  });
   app.post('/api/admin/uploads',async(req,res)=>{
     try{
       const response=await handleUpload({request:req,body:req.body,onBeforeGenerateToken:async()=>{
@@ -63,6 +71,7 @@ if(process.env.VERCEL){
     }catch(e){res.status(e.status||400).json({error:e.message||'Image upload failed'});}
   });
 }else{
+  app.post('/api/payment-proof-upload',upload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Choose a PNG, JPEG, WebP or AVIF image'});res.status(201).json({id:req.file.filename,url:`/uploads/${req.file.filename}`});});
   app.post('/api/admin/uploads',admin,upload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Choose a PNG, JPEG, WebP or AVIF image'});res.status(201).json({id:req.file.filename,url:`/uploads/${req.file.filename}`});});
 }
 app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:true,legacyHeaders:false}),async(req,res)=>{
@@ -105,7 +114,10 @@ app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders
       `*Total: ₦${total.toLocaleString()}*`,
       '',
       '*Customer and delivery details*',
-      customerSummary
+      customerSummary,
+      '',
+      '*Payment proof*',
+      parsed.data.paymentProofUrl
     ].filter((line,index,lines)=>line!==''||lines[index-1]!=='').join('\n');
     const phone=(process.env.WHATSAPP_PHONE||'').replace(/\D/g,'');
     let whatsappUrl=null;
