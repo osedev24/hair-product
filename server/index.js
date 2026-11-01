@@ -93,7 +93,9 @@ app.post('/api/checkout',rateLimit({windowMs:15*60*1000,limit:30,standardHeaders
     for(const item of d.items)quantities.set(item.productId,(quantities.get(item.productId)||0)+item.quantity);
     const ids=[...quantities.keys()];
     const {rows:products}=await client.query('SELECT id,name,price,stock,images FROM products WHERE id=ANY($1::uuid[]) AND active=true FOR UPDATE',[ids]);
-    if(products.length!==ids.length)throw Object.assign(new Error('A selected product is unavailable'),{status:409});
+    const foundIds=new Set(products.map(product=>product.id));
+    const unavailableId=ids.find(id=>!foundIds.has(id));
+    if(unavailableId)throw Object.assign(new Error(`A selected product is no longer available. Remove it from your bag and add the current product again.`),{status:409});
     const byId=new Map(products.map(p=>[p.id,p]));let subtotal=0;const snapshots=[];
     for(const [productId,quantity] of quantities){const p=byId.get(productId);if(p.stock<quantity)throw Object.assign(new Error(`${p.name} has only ${p.stock} in stock`),{status:409});subtotal+=Number(p.price)*quantity;snapshots.push({productId,quantity,name:p.name,unitPrice:p.price,image:p.images?.[0]||null});}
     const delivery=Number(selectedDelivery.fee||0),total=subtotal+delivery;
